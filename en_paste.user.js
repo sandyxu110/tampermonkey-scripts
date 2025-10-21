@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Credamo 粘贴助手
 // @namespace    https://tampermonkey-scripts-eun.pages.dev
-// @version      1.6
-// @description  仅在页面存在 <input type="text"> 时显示按钮，粘贴内容到最后聚焦的文本框
+// @version      1.7
+// @description  仅在页面存在 <input type="text"> 时显示按钮，粘贴内容到文本框
 // @author       feng + Copilot
 // @match        https://www.credamo.com/answer.html*
 // @updateURL    https://tampermonkey-scripts-eun.pages.dev/en_paste.meta.js
@@ -15,9 +15,9 @@
 
     let lastFocusedInput = null;
 
-    // 精确监听 <input type="text"> 的 focus 事件
+    // 精确监听 <input type="text"> 和 <textarea> 的 focus 事件
     const trackFocus = () => {
-        document.querySelectorAll('input[type="text"]').forEach(el => {
+        document.querySelectorAll('input[type="text"]:not([readonly]), textarea').forEach(el => {
             el.addEventListener('focus', () => {
                 lastFocusedInput = el;
             });
@@ -30,7 +30,7 @@
     btn.id = 'copilotPasteBtn';
     btn.style.position = 'fixed';
     btn.style.top = '20px';
-    btn.style.left = '20px';
+    btn.style.right = '20px';
     btn.style.zIndex = '9999';
     btn.style.padding = '10px 20px';
     btn.style.background = '#007bff'; // 蓝色
@@ -56,9 +56,9 @@
 
     document.body.appendChild(btn);
 
-    // 检查是否存在 <input type="text"> 并显示按钮
+    // 检查是否存在有效输入框并显示按钮
     const checkInputs = () => {
-        const hasTextInput = document.querySelector('input[type="text"]');
+        const hasTextInput = document.querySelector('input[type="text"]:not([readonly]), textarea');
         btn.style.display = hasTextInput ? 'block' : 'none';
         if (hasTextInput) trackFocus();
     };
