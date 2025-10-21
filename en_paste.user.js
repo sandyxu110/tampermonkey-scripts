@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Credamo 粘贴助手
 // @namespace    https://tampermonkey-scripts-eun.pages.dev
-// @version      1.7
-// @description  仅在页面存在 <input type="text"> 时显示按钮，粘贴内容到文本框
+// @version      1.8
+// @description  粘贴内容到文本框
 // @author       feng + Copilot
 // @match        https://www.credamo.com/answer.html*
 // @updateURL    https://tampermonkey-scripts-eun.pages.dev/en_paste.meta.js
@@ -30,7 +30,7 @@
     btn.id = 'copilotPasteBtn';
     btn.style.position = 'fixed';
     btn.style.top = '20px';
-    btn.style.right = '20px';
+    btn.style.left = '20px';
     btn.style.zIndex = '9999';
     btn.style.padding = '10px 20px';
     btn.style.background = '#007bff'; // 蓝色
@@ -69,4 +69,27 @@
     // 监听 DOM 变化（适用于 SPA 问卷加载）
     const observer = new MutationObserver(checkInputs);
     observer.observe(document.body, { childList: true, subtree: true });
+    // ✅ 解除文字选择限制
+    const enableTextSelection = () => {
+        document.querySelectorAll('*').forEach(el => {
+            el.style.userSelect = 'text';
+            el.style.webkitUserSelect = 'text';
+            el.style.msUserSelect = 'text';
+            el.style.MozUserSelect = 'text';
+        });
+    };
+    enableTextSelection();
+    const selectionObserver = new MutationObserver(enableTextSelection);
+    selectionObserver.observe(document.body, { childList: true, subtree: true });
+
+    // ✅ 拦截 fullscreenchange 事件传播（捕获阶段）
+    document.addEventListener('fullscreenchange', event => {
+        event.stopImmediatePropagation();
+        console.warn('fullscreenchange 事件已拦截');
+    }, true);
+
+    document.addEventListener('webkitfullscreenchange', event => {
+        event.stopImmediatePropagation();
+        console.warn('webkitfullscreenchange 事件已拦截');
+    }, true);
 })();
