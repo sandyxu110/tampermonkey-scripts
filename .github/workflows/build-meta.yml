@@ -1,0 +1,34 @@
+name: Generate .meta.js
+
+on:
+  push:
+    branches:
+      - main  # Cloudflare Pages 部署的分支
+    paths:
+      - "**/*.user.js"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate .meta.js files (recursive)
+        run: |
+          count=0
+          while IFS= read -r -d '' file; do
+            meta="${file%.user.js}.meta.js"
+            awk '/^\/\/ ==UserScript==/,/^\/\/ ==\/UserScript==/' "$file" > "$meta"
+            echo "✅ Generated: $meta"
+            count=$((count+1))
+          done < <(find . -type f -name "*.user.js" -print0)
+          echo "🔹 Total generated: $count"
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "auto: update .meta.js" || echo "No changes to commit"
+          git push
