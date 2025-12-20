@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         右上角点击显示系统时间
+// @name         问卷计时器
 // @namespace    http://tampermonkey.net/
-// @version      1.4
-// @description  右上角半透明按钮，点击才显示系统时间 HH:mm:ss
+// @version      1.5
+// @description  开始和结束时点击可统计所用时长
 // @match           *://www.credamo.cc/answer*
 // @match           *://www.credamo.com/answer*
 // @updateURL    https://tampermonkey-scripts-eun.pages.dev/time.meta.js
