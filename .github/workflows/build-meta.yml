@@ -3,9 +3,12 @@ name: Generate .meta.js
 on:
   push:
     branches:
-      - main  # Cloudflare Pages 部署的分支
+      - main
     paths:
       - "**/*.user.js"
+
+permissions:
+  contents: write   # ⭐ 关键：允许 push
 
 jobs:
   build:
