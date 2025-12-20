@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         右上角点击显示系统时间
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @description  右上角半透明按钮，点击才显示系统时间 HH:mm:ss
 // @match           *://www.credamo.cc/answer*
 // @match           *://www.credamo.com/answer*
@@ -13,6 +13,8 @@
 (function () {
     'use strict';
 
+    let firstClickTime = null; // 记录第一次点击时间
+
     // 创建按钮
     const btn = document.createElement('button');
     btn.innerText = '显示时间';
@@ -22,23 +24,40 @@
     btn.style.zIndex = '99999';
     btn.style.padding = '6px 12px';
     btn.style.fontSize = '14px';
-    btn.style.opacity = '0.6';
+    btn.style.opacity = '0.6'; // 半透明
     btn.style.background = '#000';
     btn.style.color = '#fff';
     btn.style.border = 'none';
     btn.style.borderRadius = '4px';
     btn.style.cursor = 'pointer';
 
-    // 时间格式 HH:mm:ss
-    function formatTime(date) {
-        const pad = n => n.toString().padStart(2, '0');
-        return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+    // 格式化 HH:mm:ss
+    function formatTime(ms) {
+        const totalSeconds = Math.floor(ms / 1000);
+        const h = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+        const m = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+        const s = String(totalSeconds % 60).padStart(2, '0');
+        return `${h}:${m}:${s}`;
     }
 
-    // 点击才显示一次时间
+    // 点击逻辑
     btn.onclick = function () {
-        btn.innerText = formatTime(new Date());
-        btn.style.cursor = 'default';
+        const now = new Date();
+
+        // 第一次点击
+        if (!firstClickTime) {
+            firstClickTime = now;
+            btn.innerText = formatTime(0); // 也可以显示当前时间
+            btn.innerText = [
+                String(now.getHours()).padStart(2, '0'),
+                String(now.getMinutes()).padStart(2, '0'),
+                String(now.getSeconds()).padStart(2, '0')
+            ].join(':');
+        } else {
+            // 后续点击：显示时间差
+            const diff = now - firstClickTime;
+            btn.innerText = formatTime(diff);
+        }
     };
 
     document.body.appendChild(btn);
