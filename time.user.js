@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         问卷计时器
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      2.0
 // @description  网页计时器，不受加速器影响
 // @author       Sam.f.xu
 // @match           *://www.credamo.cc/answer*
@@ -37,10 +37,11 @@
 
     // 计时状态
     let running = false;
+    let startTime = 0;
     let elapsed = 0;
-    let lastTime = 0;
     let rafId = null;
 
+    // 格式化 HH:mm:ss
     function formatTime(ms) {
         const totalSeconds = Math.floor(ms / 1000);
         const h = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
@@ -49,25 +50,29 @@
         return `${h}:${m}:${s}`;
     }
 
-    function tick(now) {
+    function tick() {
         if (!running) return;
 
-        elapsed += now - lastTime;
-        lastTime = now;
-
+        elapsed = performance.now() - startTime;
         btn.innerText = formatTime(elapsed);
+
         rafId = requestAnimationFrame(tick);
     }
 
+    // 点击逻辑：开始 / 暂停
     btn.onclick = function () {
         if (!running) {
             running = true;
-            lastTime = performance.now();
-            btn.innerText = formatTime(elapsed);
+
+            // 关键：从当前时间 - 已用时间 开始
+            startTime = performance.now() - elapsed;
+
+            btn.innerText = formatTime(elapsed); // 第一次为 00:00:00
             rafId = requestAnimationFrame(tick);
         } else {
             running = false;
             cancelAnimationFrame(rafId);
+            // elapsed 保留，便于继续
         }
     };
 
