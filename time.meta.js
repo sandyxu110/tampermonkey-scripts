@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         问卷计时器
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      2.0
 // @description  网页计时器，不受加速器影响
 // @author       Sam.f.xu
 // @match           *://www.credamo.cc/answer*
