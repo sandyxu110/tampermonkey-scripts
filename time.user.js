@@ -20,8 +20,12 @@
     let stopped = false;
     let startTime = 0;
     let rafId = null;
+
     let agreeBtn = null;
     let lastURL = location.href;
+    let agreeGoneAt = 0;
+
+    const STOP_GUARD_MS = 120;
 
     /* ================= 工具 ================= */
     function format(ms) {
@@ -64,18 +68,18 @@
         createBox();
         startTime = performance.now();
         rafId = requestAnimationFrame(tick);
-        console.log('[Timer] started');
     }
 
     function stopTimer(reason) {
         if (!started || stopped) return;
+        if (performance.now() - startTime < STOP_GUARD_MS) return;
         stopped = true;
         cancelAnimationFrame(rafId);
         box.textContent = format(performance.now() - startTime);
         console.log('[Timer] stopped:', reason);
     }
 
-    /* ================= 找“开始作答”按钮 ================= */
+    /* ================= 找开始按钮 ================= */
     function findAgreeBtn() {
         const list = Array.from(
             document.querySelectorAll('button, div, a, span')
@@ -94,10 +98,9 @@
     new MutationObserver(findAgreeBtn)
         .observe(document.body, { childList: true, subtree: true });
 
-    /* ================= 严格矩形命中 → 开始 ================= */
-    document.addEventListener('pointerdown', (e) => {
+    /* ================= 点击开始 ================= */
+    document.addEventListener('pointerdown', e => {
         if (!e.isTrusted || started || !agreeBtn) return;
-
         const r = agreeBtn.getBoundingClientRect();
         if (
             e.clientX >= r.left &&
@@ -109,16 +112,14 @@
         }
     }, true);
 
-    /* ================= 停表：SPA / 跳转 / 切页 ================= */
-
-    // 1️⃣ 页面不可见（很多 SPA 提交后会触发）
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'hidden') {
-            stopTimer('visibilitychange');
+    /* ================= 判断开始按钮消失 ================= */
+    new MutationObserver(() => {
+        if (started && !agreeBtn) {
+            agreeGoneAt ||= performance.now();
         }
-    });
+    }).observe(document.body, { childList: true, subtree: true });
 
-    // 2️⃣ URL 发生变化（SPA 路由）
+    /* ================= SPA 路由变化 ================= */
     (function () {
         const wrap = fn => function () {
             const r = fn.apply(this, arguments);
@@ -133,9 +134,19 @@
     })();
 
     window.addEventListener('locationchange', () => {
-        if (location.href !== lastURL) {
+        if (!started || stopped) return;
+
+        // ✅ 关键条件：开始按钮已消失
+        if (!agreeBtn && location.href !== lastURL) {
             lastURL = location.href;
-            stopTimer('locationchange');
+            stopTimer('route+agreeGone');
+        }
+    });
+
+    /* ================= 页面不可见 / 真跳转兜底 ================= */
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+            stopTimer('visibilitychange');
         }
     });
 
