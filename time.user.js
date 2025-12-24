@@ -14,46 +14,44 @@
 (function () {
     'use strict';
 
-    /* ================= 状态 ================= */
-    let box = null;
+    /************** 配置区 **************/
+    const START_TEXTS = new Set([
+        '同意，开始作答',
+        'I Agree, Start Survey'
+    ]);
+
+    /************** 计时显示 **************/
+    const box = document.createElement('div');
+    Object.assign(box.style, {
+        position: 'fixed',
+        top: '10px',
+        right: '10px',
+        zIndex: '99999',
+        padding: '6px 12px',
+        fontSize: '14px',
+        background: '#000',
+        color: '#fff',
+        borderRadius: '4px',
+        opacity: '0.7',
+        pointerEvents: 'none',
+        display: 'none' // ★开始前不显示
+    });
+    box.textContent = '00:00:00';
+    document.body.appendChild(box);
+
     let started = false;
     let stopped = false;
     let startTime = 0;
     let rafId = null;
-
     let agreeBtn = null;
-    let lastURL = location.href;
-    let agreeGoneAt = 0;
+    let initialURL = location.href;
 
-    const STOP_GUARD_MS = 120;
-
-    /* ================= 工具 ================= */
     function format(ms) {
         const t = Math.floor(ms / 1000);
         const h = String(Math.floor(t / 3600)).padStart(2, '0');
         const m = String(Math.floor((t % 3600) / 60)).padStart(2, '0');
         const s = String(t % 60).padStart(2, '0');
         return `${h}:${m}:${s}`;
-    }
-
-    function createBox() {
-        if (box) return;
-        box = document.createElement('div');
-        box.textContent = '00:00:00';
-        Object.assign(box.style, {
-            position: 'fixed',
-            top: '10px',
-            right: '10px',
-            zIndex: '99999',
-            padding: '6px 12px',
-            fontSize: '14px',
-            background: '#000',
-            color: '#fff',
-            borderRadius: '4px',
-            opacity: '0.7',
-            pointerEvents: 'none'
-        });
-        document.body.appendChild(box);
     }
 
     function tick() {
@@ -65,89 +63,82 @@
     function startTimer() {
         if (started) return;
         started = true;
-        createBox();
         startTime = performance.now();
+        box.style.display = 'block';
         rafId = requestAnimationFrame(tick);
+        console.log('[Timer] started');
     }
 
     function stopTimer(reason) {
         if (!started || stopped) return;
-        if (performance.now() - startTime < STOP_GUARD_MS) return;
         stopped = true;
         cancelAnimationFrame(rafId);
-        box.textContent = format(performance.now() - startTime);
-        console.log('[Timer] stopped:', reason);
+        console.log('[Timer] stopped:', reason, box.textContent);
     }
 
-    /* ================= 找开始按钮 ================= */
-    function findAgreeBtn() {
-        const list = Array.from(
+    /************** 查找开始按钮（严格白名单） **************/
+    function findStartButton() {
+        const candidates = Array.from(
             document.querySelectorAll('button, div, a, span')
-        ).filter(e => e.innerText && e.innerText.trim() === '同意，开始作答');
+        ).filter(e => {
+            if (!e.innerText) return false;
+            return START_TEXTS.has(e.innerText.trim());
+        });
 
-        agreeBtn = list.sort((a, b) => {
+        if (!candidates.length) return null;
+
+        // 选面积最小的，避免命中外层容器
+        return candidates.sort((a, b) => {
             const ra = a.getBoundingClientRect();
             const rb = b.getBoundingClientRect();
             return (ra.width * ra.height) - (rb.width * rb.height);
         })[0];
-
-        return agreeBtn;
     }
 
-    findAgreeBtn();
-    new MutationObserver(findAgreeBtn)
-        .observe(document.body, { childList: true, subtree: true });
+    agreeBtn = findStartButton();
 
-    /* ================= 点击开始 ================= */
-    document.addEventListener('pointerdown', e => {
-        if (!e.isTrusted || started || !agreeBtn) return;
+    const observer = new MutationObserver(() => {
+        if (!agreeBtn) {
+            agreeBtn = findStartButton();
+        }
+    });
+
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+
+    /************** 只在“点中开始按钮矩形”时启动 **************/
+    document.addEventListener('pointerdown', (e) => {
+        if (started) return;
+        if (!e.isTrusted) return;
+        if (!agreeBtn) return;
+
         const r = agreeBtn.getBoundingClientRect();
-        if (
-            e.clientX >= r.left &&
-            e.clientX <= r.right &&
-            e.clientY >= r.top &&
-            e.clientY <= r.bottom
-        ) {
+        const x = e.clientX;
+        const y = e.clientY;
+
+        const inside =
+            x >= r.left &&
+            x <= r.right &&
+            y >= r.top &&
+            y <= r.bottom;
+
+        if (inside) {
             startTimer();
         }
     }, true);
 
-    /* ================= 判断开始按钮消失 ================= */
-    new MutationObserver(() => {
-        if (started && !agreeBtn) {
-            agreeGoneAt ||= performance.now();
-        }
-    }).observe(document.body, { childList: true, subtree: true });
-
-    /* ================= SPA 路由变化 ================= */
-    (function () {
-        const wrap = fn => function () {
-            const r = fn.apply(this, arguments);
-            window.dispatchEvent(new Event('locationchange'));
-            return r;
-        };
-        history.pushState = wrap(history.pushState);
-        history.replaceState = wrap(history.replaceState);
-        window.addEventListener('popstate', () => {
-            window.dispatchEvent(new Event('locationchange'));
-        });
-    })();
-
-    window.addEventListener('locationchange', () => {
+    /************** 提交并跳转后停表（不影响“下一页”） **************/
+    function checkEnd() {
         if (!started || stopped) return;
 
-        // ✅ 关键条件：开始按钮已消失
-        if (!agreeBtn && location.href !== lastURL) {
-            lastURL = location.href;
-            stopTimer('route+agreeGone');
+        // URL 变化 + 开始按钮不可能再出现 = 本次答题结束
+        if (location.href !== initialURL && !findStartButton()) {
+            stopTimer('navigation-end');
         }
-    });
+    }
 
-    /* ================= 页面不可见 / 真跳转兜底 ================= */
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'hidden') {
-            stopTimer('visibilitychange');
-        }
-    });
+    setInterval(checkEnd, 500);
 
 })();
