@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         问卷计时器
 // @namespace    http://tampermonkey.net/
-// @version      2.0
-// @description  网页计时器，不受加速器影响
+// @version      2.1
+// @description  网页计时器，不受加速器影响，自动计时
 // @author       Sam.f.xu
 // @match           *://www.credamo.cc/answer*
 // @match           *://www.credamo.com/answer*
@@ -14,66 +14,95 @@
 (function () {
     'use strict';
 
-    // 创建按钮
-    const btn = document.createElement('button');
-    btn.innerText = '开始计时';
-    btn.style.position = 'fixed';
-    btn.style.top = '10px';
-    btn.style.right = '10px';
-    btn.style.zIndex = '99999';
-    btn.style.padding = '6px 12px';
-    btn.style.fontSize = '14px';
-    btn.style.minWidth = '90px';
-    btn.style.height = '32px';
-    btn.style.textAlign = 'center';
-    btn.style.opacity = '0.6';
-    btn.style.background = '#000';
-    btn.style.color = '#fff';
-    btn.style.border = 'none';
-    btn.style.borderRadius = '4px';
-    btn.style.cursor = 'pointer';
+    /* ===== 悬浮计时 ===== */
+    const box = document.createElement('div');
+    box.textContent = '00:00:00';
+    Object.assign(box.style, {
+        position: 'fixed',
+        top: '10px',
+        right: '10px',
+        zIndex: '99999',
+        padding: '6px 12px',
+        fontSize: '14px',
+        background: '#000',
+        color: '#fff',
+        borderRadius: '4px',
+        opacity: '0.7',
+        pointerEvents: 'none'
+    });
+    document.body.appendChild(box);
 
-    document.body.appendChild(btn);
-
-    // 计时状态
-    let running = false;
+    let started = false;
     let startTime = 0;
-    let elapsed = 0;
-    let rafId = null;
+    let agreeBtn = null;
 
-    // 格式化 HH:mm:ss
-    function formatTime(ms) {
-        const totalSeconds = Math.floor(ms / 1000);
-        const h = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
-        const m = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
-        const s = String(totalSeconds % 60).padStart(2, '0');
+    function format(ms) {
+        const t = Math.floor(ms / 1000);
+        const h = String(Math.floor(t / 3600)).padStart(2, '0');
+        const m = String(Math.floor((t % 3600) / 60)).padStart(2, '0');
+        const s = String(t % 60).padStart(2, '0');
         return `${h}:${m}:${s}`;
     }
 
     function tick() {
-        if (!running) return;
-
-        elapsed = performance.now() - startTime;
-        btn.innerText = formatTime(elapsed);
-
-        rafId = requestAnimationFrame(tick);
+        box.textContent = format(performance.now() - startTime);
+        requestAnimationFrame(tick);
     }
 
-    // 点击逻辑：开始 / 暂停
-    btn.onclick = function () {
-        if (!running) {
-            running = true;
+    function startTimer() {
+        if (started) return;
+        started = true;
+        startTime = performance.now();
+        requestAnimationFrame(tick);
+        console.log('[Timer] started');
+    }
 
-            // 关键：从当前时间 - 已用时间 开始
-            startTime = performance.now() - elapsed;
+    /* ===== 找“真正的按钮元素”（文本最小的那个）===== */
+    function findButton() {
+        const candidates = Array.from(document.querySelectorAll('button, div, a, span'))
+            .filter(e => e.innerText && e.innerText.trim() === '同意，开始作答');
 
-            btn.innerText = formatTime(elapsed); // 第一次为 00:00:00
-            rafId = requestAnimationFrame(tick);
-        } else {
-            running = false;
-            cancelAnimationFrame(rafId);
-            // elapsed 保留，便于继续
+        // 选“面积最小”的那个（通常才是真按钮）
+        agreeBtn = candidates.sort((a, b) => {
+            const ra = a.getBoundingClientRect();
+            const rb = b.getBoundingClientRect();
+            return (ra.width * ra.height) - (rb.width * rb.height);
+        })[0];
+
+        return agreeBtn;
+    }
+
+    findButton();
+
+    const observer = new MutationObserver(() => {
+        if (findButton()) observer.disconnect();
+    });
+
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+
+    /* ===== 全局监听：严格基于矩形 ===== */
+    document.addEventListener('pointerdown', (e) => {
+        if (started) return;
+        if (!e.isTrusted) return;
+        if (!agreeBtn) return;
+
+        const r = agreeBtn.getBoundingClientRect();
+
+        const x = e.clientX;
+        const y = e.clientY;
+
+        const inside =
+            x >= r.left &&
+            x <= r.right &&
+            y >= r.top &&
+            y <= r.bottom;
+
+        if (inside) {
+            startTimer();
         }
-    };
+    }, true);
 
 })();
