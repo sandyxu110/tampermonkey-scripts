@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Credamo 粘贴助手
 // @namespace    https://tampermonkey-scripts-eun.pages.dev
-// @version      1.8
+// @version      1.9
 // @description  粘贴内容到文本框
 // @author       feng + Copilot
 // @match        https://www.credamo.com/answer.html*
@@ -43,17 +43,18 @@
 
     // 点击事件：粘贴到最后聚焦的输入框
     btn.onclick = () => {
-        if (lastFocusedInput) {
-            const text = prompt('请粘贴你的内容：');
-            if (text !== null) {
-                lastFocusedInput.value = text;
-                lastFocusedInput.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-        } else {
-            alert('请先点击一个文本输入框使其获得焦点');
-        }
-    };
+    let targetInput = lastFocusedInput || document.querySelector('input[type="text"], textarea');
 
+    if (targetInput) {
+        const text = prompt('请粘贴你的内容：');
+        if (text !== null) {
+            targetInput.value = text;
+            targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    } else {
+        alert('页面中没有文本输入框');
+    }
+};
     document.body.appendChild(btn);
 
     // 检查是否存在有效输入框并显示按钮
