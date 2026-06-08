@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Credamo 粘贴助手
 // @namespace    https://tampermonkey-scripts-eun.pages.dev
-// @version      2.0
-// @description  粘贴内容到文本框
+// @version      2.1
+// @description  解除复制粘贴限制
 // @author       feng + Codex
 // @match        https://www.credamo.com/answer.html*
 // @match        https://www.credamo.cc/answer.html*
