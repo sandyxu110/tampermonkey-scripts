@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Credamo 粘贴助手
 // @namespace    https://tampermonkey-scripts-eun.pages.dev
-// @version      2.1
+// @version      2.2
 // @description  解除复制粘贴限制
 // @author       feng + Codex
 // @match        https://www.credamo.com/answer.html*
@@ -20,11 +20,14 @@
     'copy',
     'cut',
     'paste',
+    'beforeinput',
     'contextmenu',
     'dragstart',
   ]);
 
   const keyboardEvents = new Set(['keydown', 'keypress', 'keyup']);
+  let lastEditableTarget = null;
+  let pastePanel = null;
 
   const styleText = `
     * {
@@ -40,6 +43,77 @@
     [contenteditable="true"] {
       -webkit-user-select: text !important;
       user-select: text !important;
+    }
+
+    #credamo-unlock-paste-button {
+      position: fixed !important;
+      right: 12px !important;
+      bottom: 84px !important;
+      z-index: 2147483647 !important;
+      width: 58px !important;
+      height: 40px !important;
+      border: 0 !important;
+      border-radius: 8px !important;
+      background: #1463ff !important;
+      color: #fff !important;
+      font: 600 14px/1 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28) !important;
+      display: none !important;
+      -webkit-user-select: none !important;
+      user-select: none !important;
+    }
+
+    #credamo-unlock-paste-panel {
+      position: fixed !important;
+      inset: auto 10px 10px 10px !important;
+      z-index: 2147483647 !important;
+      padding: 10px !important;
+      border-radius: 8px !important;
+      background: #fff !important;
+      color: #111 !important;
+      box-shadow: 0 10px 34px rgba(0, 0, 0, 0.34) !important;
+      display: none !important;
+      font: 14px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+    }
+
+    #credamo-unlock-paste-panel textarea {
+      box-sizing: border-box !important;
+      display: block !important;
+      width: 100% !important;
+      height: 112px !important;
+      margin: 0 0 8px !important;
+      padding: 8px !important;
+      border: 1px solid #bbb !important;
+      border-radius: 6px !important;
+      color: #111 !important;
+      background: #fff !important;
+      font: 16px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+      -webkit-user-select: text !important;
+      user-select: text !important;
+    }
+
+    #credamo-unlock-paste-panel .credamo-unlock-actions {
+      display: flex !important;
+      gap: 8px !important;
+      justify-content: flex-end !important;
+    }
+
+    #credamo-unlock-paste-panel button {
+      min-width: 72px !important;
+      height: 36px !important;
+      border: 0 !important;
+      border-radius: 6px !important;
+      font: 600 14px/1 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+    }
+
+    #credamo-unlock-paste-cancel {
+      background: #e8e8e8 !important;
+      color: #111 !important;
+    }
+
+    #credamo-unlock-paste-insert {
+      background: #1463ff !important;
+      color: #fff !important;
     }
   `;
 
@@ -85,10 +159,22 @@
       (node instanceof HTMLElement && node.isContentEditable);
   }
 
+  function isScriptUi(node) {
+    return node instanceof HTMLElement &&
+      Boolean(node.closest('#credamo-unlock-paste-button, #credamo-unlock-paste-panel'));
+  }
+
+  function rememberEditableTarget(node) {
+    if (isEditable(node) && !node.disabled && !node.readOnly && !isScriptUi(node)) {
+      lastEditableTarget = node;
+      showPasteButton();
+    }
+  }
+
   function findEditableTarget(event) {
     const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
     const target = [...path, event.target, document.activeElement].find((node) => {
-      return isEditable(node) && !node.disabled && !node.readOnly;
+      return isEditable(node) && !node.disabled && !node.readOnly && !isScriptUi(node);
     });
 
     return target || null;
@@ -157,14 +243,8 @@
     dispatchEditEvents(element, text);
   }
 
-  function handlePaste(event) {
-    const text = event.clipboardData && event.clipboardData.getData('text/plain');
-    const target = findEditableTarget(event);
-
-    event.preventDefault();
-    event.stopImmediatePropagation();
-
-    if (!text || !target) {
+  function insertIntoTarget(target, text) {
+    if (!target || !text) {
       return;
     }
 
@@ -176,7 +256,45 @@
     insertIntoContentEditable(target, text);
   }
 
+  function handlePaste(event) {
+    const text = event.clipboardData && event.clipboardData.getData('text/plain');
+    const target = findEditableTarget(event);
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    insertIntoTarget(target, text);
+  }
+
+  function handleBeforeInput(event) {
+    if (event.inputType !== 'insertFromPaste') {
+      return false;
+    }
+
+    const dataTransferText = event.dataTransfer && event.dataTransfer.getData('text/plain');
+    const text = dataTransferText || event.data || '';
+    const target = findEditableTarget(event);
+
+    if (!text || !target) {
+      return false;
+    }
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    insertIntoTarget(target, text);
+    return true;
+  }
+
   function letBrowserHandle(event) {
+    if (isScriptUi(event.target)) {
+      event.stopImmediatePropagation();
+      return;
+    }
+
+    if (event.type === 'beforeinput' && handleBeforeInput(event)) {
+      return;
+    }
+
     if (event.type === 'paste') {
       handlePaste(event);
       return;
@@ -192,6 +310,97 @@
     }
   }
 
+  function showPasteButton() {
+    const button = document.getElementById('credamo-unlock-paste-button');
+    if (button) {
+      button.style.display = 'block';
+    }
+  }
+
+  function hidePastePanel() {
+    const panel = document.getElementById('credamo-unlock-paste-panel');
+    if (!panel) {
+      return;
+    }
+
+    panel.style.display = 'none';
+    const textarea = panel.querySelector('textarea');
+    if (textarea) {
+      textarea.value = '';
+    }
+  }
+
+  function openPastePanel() {
+    if (!lastEditableTarget || !document.documentElement.contains(lastEditableTarget)) {
+      rememberEditableTarget(document.activeElement);
+    }
+
+    const panel = document.getElementById('credamo-unlock-paste-panel');
+    const textarea = panel && panel.querySelector('textarea');
+    if (!panel || !textarea) {
+      return;
+    }
+
+    panel.style.display = 'block';
+    textarea.value = '';
+    textarea.focus();
+  }
+
+  function stopPanelEvent(event) {
+    event.stopPropagation();
+  }
+
+  function installMobilePastePanel() {
+    if (document.getElementById('credamo-unlock-paste-button')) {
+      return;
+    }
+
+    const button = document.createElement('button');
+    button.id = 'credamo-unlock-paste-button';
+    button.type = 'button';
+    button.textContent = 'Paste';
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openPastePanel();
+    });
+
+    pastePanel = document.createElement('div');
+    pastePanel.id = 'credamo-unlock-paste-panel';
+    pastePanel.innerHTML = [
+      '<textarea autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste text here"></textarea>',
+      '<div class="credamo-unlock-actions">',
+      '<button id="credamo-unlock-paste-cancel" type="button">Cancel</button>',
+      '<button id="credamo-unlock-paste-insert" type="button">Insert</button>',
+      '</div>',
+    ].join('');
+
+    ['paste', 'beforeinput', 'input', 'keydown', 'keyup', 'keypress', 'touchstart', 'touchend', 'click']
+      .forEach((eventName) => {
+        pastePanel.addEventListener(eventName, stopPanelEvent, true);
+        button.addEventListener(eventName, stopPanelEvent, true);
+      });
+
+    pastePanel.querySelector('#credamo-unlock-paste-cancel').addEventListener('click', (event) => {
+      event.preventDefault();
+      hidePastePanel();
+    });
+
+    pastePanel.querySelector('#credamo-unlock-paste-insert').addEventListener('click', (event) => {
+      event.preventDefault();
+      const textarea = pastePanel.querySelector('textarea');
+      const text = textarea ? textarea.value : '';
+      hidePastePanel();
+      insertIntoTarget(lastEditableTarget, text);
+    });
+
+    document.documentElement.appendChild(button);
+    document.documentElement.appendChild(pastePanel);
+    document.addEventListener('focusin', (event) => rememberEditableTarget(event.target), true);
+    document.addEventListener('touchstart', (event) => rememberEditableTarget(event.target), true);
+    document.addEventListener('mousedown', (event) => rememberEditableTarget(event.target), true);
+  }
+
   function clearInlineLocks(root) {
     const targets = [document, document.documentElement, document.body, root].filter(Boolean);
 
@@ -200,6 +409,7 @@
       target.oncopy = null;
       target.oncut = null;
       target.onpaste = null;
+      target.onbeforeinput = null;
       target.oncontextmenu = null;
       target.ondragstart = null;
       target.onkeydown = null;
@@ -208,12 +418,13 @@
     }
 
     if (root && root.querySelectorAll) {
-      root.querySelectorAll('[onselectstart], [oncopy], [oncut], [onpaste], [oncontextmenu], [ondragstart], [onkeydown], [onkeypress], [onkeyup]')
+      root.querySelectorAll('[onselectstart], [oncopy], [oncut], [onpaste], [onbeforeinput], [oncontextmenu], [ondragstart], [onkeydown], [onkeypress], [onkeyup]')
         .forEach((node) => {
           node.removeAttribute('onselectstart');
           node.removeAttribute('oncopy');
           node.removeAttribute('oncut');
           node.removeAttribute('onpaste');
+          node.removeAttribute('onbeforeinput');
           node.removeAttribute('oncontextmenu');
           node.removeAttribute('ondragstart');
           node.removeAttribute('onkeydown');
@@ -257,6 +468,7 @@
         'oncopy',
         'oncut',
         'onpaste',
+        'onbeforeinput',
         'oncontextmenu',
         'ondragstart',
         'onkeydown',
@@ -273,13 +485,16 @@
     addUnlockStyle();
     clearInlineLocks(document.documentElement);
     installMutationCleaner();
+    installMobilePastePanel();
   } else {
     document.addEventListener('DOMContentLoaded', () => {
       addUnlockStyle();
       clearInlineLocks(document.documentElement);
       installMutationCleaner();
+      installMobilePastePanel();
     }, { once: true });
   }
+
 
   // ✅ 拦截 fullscreenchange 事件传播（捕获阶段）
     document.addEventListener('fullscreenchange', event => {
