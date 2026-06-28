@@ -1,33 +1,30 @@
-name: Generate index
+name: Generate Index
 
 on:
   push:
     branches:
       - main
 
+permissions:
+  contents: write
+
 jobs:
-  generate:
+  build:
+
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: write
-
     steps:
+
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Generate index.html
-        run: |
-          echo '<!DOCTYPE html>' > index.html
-          echo '<html><head><meta charset="utf-8"><title>Tampermonkey Scripts</title></head><body>' >> index.html
-          echo '<h1>Tampermonkey Scripts</h1><ul>' >> index.html
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
 
-          for f in *.user.js; do
-            [ -f "$f" ] || continue
-            meta="${f%.user.js}.meta.js"
-            echo "<li><a href=\"$f\">$f</a> | <a href=\"$meta\">meta</a></li>" >> index.html
-          done
-
-          echo '</ul></body></html>' >> index.html
+      - name: Generate
+        run: python generate_index.py
 
       - name: Commit
         run: |
