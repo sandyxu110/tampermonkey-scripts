@@ -1,0 +1,40 @@
+name: Generate index
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate index.html
+        run: |
+          echo '<!DOCTYPE html>' > index.html
+          echo '<html><head><meta charset="utf-8"><title>Tampermonkey Scripts</title></head><body>' >> index.html
+          echo '<h1>Tampermonkey Scripts</h1><ul>' >> index.html
+
+          for f in *.user.js; do
+            [ -f "$f" ] || continue
+            meta="${f%.user.js}.meta.js"
+            echo "<li><a href=\"$f\">$f</a> | <a href=\"$meta\">meta</a></li>" >> index.html
+          done
+
+          echo '</ul></body></html>' >> index.html
+
+      - name: Commit
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+
+          git add index.html
+
+          git diff --cached --quiet || \
+          (git commit -m "auto: update index.html" && git push)
