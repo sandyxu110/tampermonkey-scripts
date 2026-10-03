@@ -1,37 +1,46 @@
-name: Generate .meta.js
+name: Generate Index
 
 on:
   push:
     branches:
       - main
-    paths:
-      - "**/*.user.js"
 
 permissions:
-  contents: write   # ⭐ 关键：允许 push
+  contents: write
+
+concurrency:
+  group: generate-index
+  cancel-in-progress: true
 
 jobs:
   build:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
 
-      - name: Generate .meta.js files (recursive)
-        run: |
-          count=0
-          while IFS= read -r -d '' file; do
-            meta="${file%.user.js}.meta.js"
-            awk '/^\/\/ ==UserScript==/,/^\/\/ ==\/UserScript==/' "$file" > "$meta"
-            echo "✅ Generated: $meta"
-            count=$((count+1))
-          done < <(find . -type f -name "*.user.js" -print0)
-          echo "🔹 Total generated: $count"
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Commit and push changes
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Generate
+        run: python generate_index.py
+
+      - name: Commit
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
-          git commit -m "auto: update .meta.js" || echo "No changes to commit"
-          git push
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+
+          git add index.html
+
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+
+          git commit -m "auto: update index.html"
+          git push origin HEAD:main
